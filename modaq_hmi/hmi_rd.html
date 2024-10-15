@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--
+
+-->
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MODAQ HMI</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<script src="js/chart.332.min.js"></script>
+<script src="js/luxon.min.js"></script>
+<script src="js/chartjs-adapter-luxon.js"></script>
+<script src="js/chartjs-plugin-streaming.min.js"></script>
+
+<script type="text/javascript" src="js/roslib.min.js"></script>
+<script type="text/javascript" src="js/modaq/rosbridge-connect.js"></script>
+
+<script> // ROSBridge Listeners
+
+    // MPU6050 IMU
+    var mpu6050_data = {};
+    var mpu6050_listener = new ROSLIB.Topic({
+        ros: ros,
+        name: '/mpu6050',
+        messageType: 'mpu6050_ros_driver/msg/Mpu6050',
+        throttle_rate: 1000  // throttle_rate sets update interval in ms
+    });
+
+    // When we receive a message on /mpu6050, print in same placeholder
+    mpu6050_listener.subscribe(function (message) {
+        // copy ROS data to var with global scope
+        mpu6050_data = message;
+        document.getElementById("ins-ax").innerHTML = message.ax.toFixed(3);
+        document.getElementById("ins-ay").innerHTML = message.ay.toFixed(3);
+        document.getElementById("ins-az").innerHTML = message.az.toFixed(3);
+        //document.getElementById("ins-gx").innerHTML = message.gx.toFixed(3);
+        //document.getElementById("ins-gy").innerHTML = message.gy.toFixed(3);
+        //document.getElementById("ins-gz").innerHTML = message.gz.toFixed(3);
+        document.getElementById("ins-temp").innerHTML = message.temp.toFixed(3);
+        //console.log(message);
+
+    });
+    // --------------------------------------
+    // MODBUS Temperature and Humidity Sensor
+    var ths_data = {};
+    var ths_listener = new ROSLIB.Topic({
+        ros: ros,
+        name: '/ths',
+        messageType: 'ths_modbus/msg/Th',
+        throttle_rate: 1000
+    });
+
+    ths_listener.subscribe(function (message) {
+        // copy ROS data to var with global scope
+        ths_data = message;
+        document.getElementById("ths-temp").innerHTML = message.temperature.toFixed(1);
+        document.getElementById("ths-hum").innerHTML = message.humidity.toFixed(1);
+        //console.log(ths_data);    
+
+        if (ths_data.humidity > 90) {
+            document.getElementById("status1").innerHTML = "<span class='traffic_light false'>Humidity</span>";
+        } else if (ths_data.humidity > 65) {
+            document.getElementById("status1").innerHTML = "<span class='traffic_light warn'>Humidity</span>";
+        } else {
+            document.getElementById("status1").innerHTML = "<span class='traffic_light true'>Humidity</span>";
+        }
+
+        if (ths_data.temperature > 28) {
+            document.getElementById("status2").innerHTML = "<span class='traffic_light false'>TEMP</span>";
+        } else if (ths_data.humidity > 27) {
+            document.getElementById("status2").innerHTML = "<span class='traffic_light warn'>TEMP</span>";
+        } else {
+            document.getElementById("status2").innerHTML = "<span class='traffic_light true'>TEMP</span>";
+        }
+
+    });
+
+    // T8 DIO States
+    var T8_DIO_data = {};
+    var T8_DIO_listener = new ROSLIB.Topic({
+        ros: ros,
+        name: '/T8dio',
+        messageType: 'labjack_t8_ros/msg/T8dio',
+        throttle_rate: 1000
+    });
+
+    T8_DIO_listener.subscribe(function (message) {
+        T8_DIO_data = message;
+        if (T8_DIO_data.fio0) {
+            document.getElementById("status3").innerHTML = "<span class='traffic_light true'>Solenoid 1</span>";
+            document.getElementById("sol1").style.color = "green";
+        } else {
+            document.getElementById("status3").innerHTML = "<span class='traffic_light false'>Solenoid 1</span>";
+            document.getElementById("sol1").style.color = "black";
+        }
+
+        if (T8_DIO_data.fio1) {
+            document.getElementById("status4").innerHTML = "<span class='traffic_light true'>Solenoid 2</span>";
+            document.getElementById("sol2").style.color = "green";
+        } else {
+            document.getElementById("status4").innerHTML = "<span class='traffic_light false'>Solenoid 2</span>";
+            document.getElementById("sol2").style.color = "black";
+        }
+
+        if (T8_DIO_data.fio2) {
+            document.getElementById("status5").innerHTML = "<span class='traffic_light true'>Solenoid 3</span>";
+            document.getElementById("sol3").style.color = "green";
+        } else {
+            document.getElementById("status5").innerHTML = "<span class='traffic_light false'>Solenoid 3</span>";
+            document.getElementById("sol3").style.color = "black";
+        }
+
+        if (T8_DIO_data.fio3) {
+            document.getElementById("status6").innerHTML = "<span class='traffic_light true'>Solenoid 4</span>";
+            document.getElementById("sol4").style.color = "green";
+        } else {
+            document.getElementById("status6").innerHTML = "<span class='traffic_light false'>Solenoid 4</span>";
+            document.getElementById("sol4").style.color = "black";
+        }
+
+    });
+
+    // LabJack T8 AIN subscriber
+    var T8_AIN_data = {
+        ain0: 0,
+        ain1: 0,
+        ain2: 0,
+        ain3: 0
+    };
+    var T8_AIN_listener = new ROSLIB.Topic({
+        ros: ros,
+        name: '/labjack_ain',
+        messageType: 'labjack_t8_ros/msg/T8ain',
+        throttle_rate: 1000
+    });
+
+    // When we receive a message on /chatter, print in same placeholder
+    T8_AIN_listener.subscribe(function (message) {
+        T8_AIN_data.ain0 = message.ain0[0];
+        T8_AIN_data.ain1 = message.ain1[0];
+        T8_AIN_data.ain2 = message.ain2[0];
+        T8_AIN_data.ain3 = message.ain3[0];
+        document.getElementById("ch0").innerHTML = message.ain0[0].toFixed(3);
+        document.getElementById("ch1").innerHTML = message.ain1[0].toFixed(3);
+        document.getElementById("ch2").innerHTML = message.ain2[0].toFixed(3);
+        document.getElementById("ch3").innerHTML = message.ain3[0].toFixed(3);
+        document.getElementById("ch4").innerHTML = message.ain4[0].toFixed(3);
+        document.getElementById("ch5").innerHTML = message.ain5[0].toFixed(3);
+        document.getElementById("ch6").innerHTML = message.ain6[0].toFixed(3);
+        document.getElementById("ch7").innerHTML = message.ain7[0].toFixed(3);
+        //console.log(T8_AIN_data);
+    });
+
+</script>
+
+<script>
+    // Create a bind and event listener for a user inputs
+    window.onload = function () {
+        const pubBind = document.getElementById("pub_button");
+        pubBind.addEventListener("click", pub2MODAQ);
+
+        // these are just to value some placeholders until the code dynamically changes them
+        document.getElementById("status1").innerHTML = "<span class='traffic_light inactive'>Status 1</span>";
+        document.getElementById("status2").innerHTML = "<span class='traffic_light inactive'>Status 2</span>";
+        document.getElementById("status3").innerHTML = "<span class='traffic_light inactive'>Status 3</span>";
+        document.getElementById("status4").innerHTML = "<span class='traffic_light inactive'>Status 4</span>";
+        document.getElementById("status5").innerHTML = "<span class='traffic_light inactive'>Status 5</span>";
+        document.getElementById("status6").innerHTML = "<span class='traffic_light inactive'>Status 6</span>";
+        document.getElementById("status7").innerHTML = "<span class='traffic_light inactive'>Status 7</span>";
+    };
+</script>
+
+<script> // ROSBridge Publisher
+
+    // Publishing a Topic
+    // First, we create a Topic object with details of the topic's name and message type.
+    var hmiCtl = new ROSLIB.Topic({
+        ros: ros,
+        name: '/hmi_ctl',
+        messageType: 'modaq_messages/msg/Hmi'
+    });
+
+    // Then we create the payload to be published. The object is using
+    // the fields defined in Hmi.msg
+    // Note that we can value on the fields we want to update, however
+    // any field not updated will be reset to default, so we need to keep track
+    // of any values that need to persist
+
+    function pub2MODAQ() {
+        // do this on button click from user
+        var user_int1 = parseInt(document.getElementById("user_int1_input").value);
+        var user_override = (document.getElementById("user_override_input").checked);
+        var user_do0 = (document.getElementById("user_do0_input").checked);
+        var user_do1 = (document.getElementById("user_do1_input").checked);
+        var user_do2 = (document.getElementById("user_do2_input").checked);
+        var user_do3 = (document.getElementById("user_do3_input").checked);
+        //console.log(user_bool1);
+        var hmiPub = new ROSLIB.Message({
+            override: user_override,
+            do0: user_do0,
+            do1: user_do1,
+            do2: user_do2,
+            do3: user_do3,
+            int1: user_int1,
+            message1: 'Hello Casey',
+            message2: 'Hello Aidan',
+            float2: 3.17,
+            header: {
+                frame_id: '1'
+            }
+        });
+
+        // And finally, publish.
+        hmiCtl.publish(hmiPub);
+    };
+</script>
+
+<body>
+    <!--Begin the HTML part of our broadcast-->
+    <div class="wrapper">
+        <div class="tile headerTile">
+            MODAQ M2 HMI v0.3
+            <!--  <ul>
+                <li>Just the basics in this version- get some live data updating on screen.</li>
+                <li>This subscribes to mpu6050 topic published by mpu6050_ros_node:<br>
+                    <code>ros2 run mpu6050_ros_driver mpu6050_ros_node</code>
+                </li>
+                <li>Make sure the rosbridge server is started:<br>
+                    <code>ros2 run rosbridge_server rosbridge_websocket</code>
+                </li>
+            </ul> -->
+        </div>
+        <div class="tile infoTile">
+            <p>Connected to rosbridge: <span id="status" style="font-weight: bold">N/A</span></p>
+        </div>
+
+        <div class="tile statusTile">
+            <span id="status1">Humidity</span>
+            <span id="status2">TEMP</span>
+            <span id="status3">Solenoid 1</span>
+            <span id="status4">Solenoid 2</span>
+            <span id="status5">Solenoid 3</span>
+            <span id="status6">Solenoid 4</span>
+            <span id="status7">Status 7</span>
+        </div>
+
+        <div class="tile a">
+            <div style="width: 150px ; float: left">
+                <p style="font-weight: bold;">MPU6050<br>Accelerometer
+                    <span class="tooltip" style="color: blue"> &#9432;
+                        <span class="tooltiptext">This is the 6 DOF</span>
+                    </span>
+                </p>
+                <p>AX (g): <span id="ins-ax" style="color: blue"></span></p>
+                <p>AY (g): <span id="ins-ay" style="color: blue"></span></p>
+                <p>AZ (g): <span id="ins-az" style="color: blue"></span></p>
+
+            </div>
+            <div class="chartBox-1">
+                <canvas id="mpu6050_chart"></canvas>
+            </div>
+        </div>
+        <div class="tile b">
+            <div style="width: 150px ; float: left">
+                <p style="font-weight: bold;">MPU6050</p>
+                <p>Temp (°C): <span id="ins-temp" style="color: blue"></span></p>
+            </div>
+            <div class="chartBox-2">
+                <canvas id="mpu6050Temp_chart"></canvas>
+            </div>
+        </div>
+
+        <div class="tile c">
+            <div style="width: 150px ; float: left">
+                <p style="font-weight: bold;">Environmental<br>Sensor</p>
+                <p>Temp (°C): <span id="ths-temp" style="color: blue"></span></p>
+                <p>Humidity (%): <span id="ths-hum" style="color: blue"></span></p>
+            </div>
+            <div class="chartBox-1">
+                <canvas id="ths_chart"></canvas>
+            </div>
+        </div>
+
+        <div class="tile d">
+            User1 (int): <input type="number" value=0 id="user_int1_input" style="width:50px" />
+            <p>
+                Allow Solenoid Override from HMI? <input type="checkbox" value=0 id="user_override_input" />
+                <span class="tooltip" style="color: blue"> &#9432;
+                    <span class="tooltiptext">Changes are ignored by MODAQ unless this box is checked. &#010;
+                        When checked, all values are sent and actioned, so if something is on and you want it to remain
+                        on, tick its checkbox.
+                    </span>
+                </span><br>
+                <span id="sol1">Solenoid 1</span> <input type="checkbox" value=0 id="user_do0_input" /> <br>
+                <span id="sol2">Solenoid 2</span> <input type="checkbox" value=0 id="user_do1_input" /> <br>
+                <span id="sol3">Solenoid 3</span> <input type="checkbox" value=0 id="user_do2_input" /> <br>
+                <span id="sol4">Solenoid 4</span> <input type="checkbox" value=0 id="user_do3_input" /> <br>
+                <p />
+                <button id="pub_button">Push to MODAQ</button>
+
+        </div>
+
+        <div class="tile e">
+            <div style="width: 150px ; float: left">
+                <p style="font-weight: bold;">AIN Data</p>
+                Ch0 (v): <span id="ch0" style="color: blue;"></span><br>
+                Ch1 (v): <span id="ch1" style="color: blue;"></span><br>
+                Ch2 (v): <span id="ch2" style="color: blue;"></span><br>
+                Ch3 (v): <span id="ch3" style="color: blue;"></span><br>
+                Ch4 (v): <span id="ch4" style="color: blue;"></span><br>
+                Ch5 (v): <span id="ch5" style="color: blue;"></span><br>
+                Ch6 (v): <span id="ch6" style="color: blue;"></span><br>
+                Ch7 (v): <span id="ch7" style="color: blue;"></span><br>
+            </div>
+            <div class="chartBox-1">
+                <canvas id="ain_chart"></canvas>
+            </div>
+
+        </div>
+
+
+    </div>
+    <script> // MPU Primary Chart
+        // setup block
+        const data = {
+            labels: [],
+            datasets: [{
+                label: 'Ax',
+                data: [],
+                backgroundColor: 'rgba(75,192,192,0.5)',
+                borderColor: 'rgba(75,192,192,1)',
+                //yAxisID: 'y',
+            }, {
+                label: 'Ay',
+                data: [],
+                backgroundColor: 'rgba(0,0,255,0.5)',
+                borderColor: 'rgba(0,0,255,1)',
+                //yAxisID: 'y1',
+            }, {
+                label: 'Az',
+                data: [],
+                backgroundColor: 'rgba(60,180,0,0.5)',
+                borderColor: 'rgba(60,180,0,1)',
+                //yAxisID: 'y1',
+            }
+            ]
+        };
+
+        // config block
+        //const dataMap = { Ax: 'ax', Ay: 'ay', Az: 'az', Temp: 'temp' };
+        const dataMap = { Ax: 'ax', Ay: 'ay', Az: 'az' };
+        const config = {
+            type: 'line',
+            data,
+            options: {
+                animation: false,  // disable animations
+                interaction: {
+                    intersect: false
+                },
+                elements: {
+                    point: {
+                        radius: 0 // zero = don't plot the points
+                    },
+                    line: {
+                        borderWidth: 2, // sets the line weight
+                        tension: 0.1, // adds a little spline/curviness to the line
+                    },
+                },
+                scales: {
+                    x: {
+                        type: 'realtime',
+                        realtime: {
+                            //delay: 100,
+                            duration: 60000, // chart history (60000 = 60 seconds, with 1 Hz data)
+                            ttl: undefined,
+                            frameRate: 20,
+                            onRefresh: chart => {
+                                chart.data.datasets.forEach(dataset => {
+                                    //console.log(dataset)
+                                    dataset.data.push({
+                                        x: Date.now(),
+                                        //y: dataset.label === 'Ax' ? mpu6050_data.ax : dataset.label === 'Ay' ?mpu6050_data.ay : mpu6050_data.az
+                                        y: mpu6050_data[dataMap[dataset.label]],
+                                    });
+                                });
+                            }
+                        }
+                    },
+                    y: {
+                        suggestedMax: 1,
+                        suggestedMin: -1
+                        // ticks: {
+                        //     stepSize: 0.5
+                        //}
+                    },
+                }
+            }
+        };
+
+        // render init block
+        const mpu6050_chart = new Chart(
+            document.getElementById('mpu6050_chart'),
+            config
+        );
+
+
+    </script>
+
+    <script> // MPU Temperature Chart
+        // setup block
+        const data1 = {
+            labels: [],
+            datasets: [{
+                label: 'Temperature',
+                data: [],
+                backgroundColor: 'rgba(75,192,192,0.5)',
+                borderColor: 'rgba(75,192,192,1)',
+            },
+            ]
+        };
+
+        // config block
+        const config1 = {
+            type: 'line',
+            data: data1,
+            options: {
+                animation: false,  // disable animations
+                interaction: {
+                    intersect: false
+                },
+                elements: {
+                    point: {
+                        radius: 0 // zero = don't plot the points
+                    },
+                    line: {
+                        borderWidth: 2, // sets the line weight
+                        tension: 0.1, // adds a little spline/curviness to the line
+                    },
+                },
+                scales: {
+                    x: {
+                        type: 'realtime',
+                        realtime: {
+                            //delay: 100,
+                            duration: 60000, // chart history (60000 = 60 seconds, with 1 Hz data)
+                            ttl: undefined,
+                            frameRate: 20,
+                            onRefresh: chart => {
+                                chart.data.datasets.forEach(dataset => {
+                                    //console.log(dataset),
+                                    dataset.data.push({
+                                        x: Date.now(),
+                                        y: mpu6050_data.temp
+                                        //y: Math.random() * 10
+                                    });
+                                });
+                                //console.log(mpu6050_data.temp)
+                            }
+                        }
+                    },
+                    y: {
+                        suggestedMax: 30,
+                        suggestedMin: 20
+                        // ticks: {
+                        //     stepSize: 0.5
+                        //}
+                    },
+                }
+            }
+        };
+
+        // render init block
+        const mpu6050Temp_chart = new Chart(
+            document.getElementById('mpu6050Temp_chart'),
+            config1
+        );
+
+
+    </script>
+
+    <script> // THS Chart
+        // setup block
+        const data2 = {
+            labels: [],
+            datasets: [{
+                label: 'Temperature',
+                data: [],
+                backgroundColor: 'rgba(75,192,192,0.5)',
+                borderColor: 'rgba(75,192,192,1)',
+                yAxisID: 'y',
+            }, {
+                label: 'Humidity',
+                data: [],
+                backgroundColor: 'rgba(0,0,255,0.5)',
+                borderColor: 'rgba(0,0,255,1)',
+                yAxisID: 'y1',
+            },
+            ]
+        };
+
+        // config block
+        const config2 = {
+            type: 'line',
+            data: data2,
+            options: {
+                animation: false,  // disable animations
+                interaction: {
+                    intersect: false
+                },
+                elements: {
+                    point: {
+                        radius: 0 // zero = don't plot the points
+                    },
+                    line: {
+                        borderWidth: 2, // sets the line weight
+                        tension: 0.1, // adds a little spline/curviness to the line
+                    },
+                },
+                scales: {
+                    x: {
+                        type: 'realtime',
+                        realtime: {
+                            //delay: 100,
+                            duration: 60000, // chart history (60000 = 60 seconds, with 1 Hz data)
+                            ttl: undefined,
+                            frameRate: 20,
+                            onRefresh: chart => {
+                                chart.data.datasets.forEach(dataset => {
+                                    //console.log(dataset),
+                                    dataset.data.push({
+                                        x: Date.now(),
+                                        y: dataset.label === 'Temperature' ? ths_data.temperature : ths_data.humidity
+                                        //y: Math.random() * 10
+                                    });
+                                });
+
+                            }
+                        }
+                    },
+                    y: {
+                        suggestedMax: 30,
+                        suggestedMin: 20,
+                        position: 'left',
+                        ticks: {
+                            color: 'rgba(75,192,192,1)',
+                            //     stepSize: 0.5,
+                        }
+                    },
+                    y1: {
+                        suggestedMax: 65,
+                        suggestedMin: 40,
+                        position: 'right',
+                        ticks: {
+                            color: 'rgba(0,0,255,1)',
+                            //stepSize: 0.5,
+                        }
+                    },
+                }
+            }
+        };
+
+        // render init block
+        const ths_chart = new Chart(
+            document.getElementById('ths_chart'),
+            config2
+        );
+
+
+    </script>
+
+    <script> // AIN Chart
+        
+        // setup block
+        const data3 = {
+            labels: [],
+            datasets: [{
+                label: 'Ch0',
+                data: [],
+                backgroundColor: 'rgba(75,192,192,0.5)',
+                borderColor: 'rgba(75,192,192,1)',
+                //yAxisID: 'y',
+            }, {
+                label: 'Ch1',
+                data: [],
+                backgroundColor: 'rgba(0,0,255,0.5)',
+                borderColor: 'rgba(0,0,255,1)',
+                //yAxisID: 'y1',
+            }, {
+                label: 'Ch2',
+                data: [],
+                backgroundColor: 'rgba(60,180,0,0.5)',
+                borderColor: 'rgba(60,180,0,1)',
+                //yAxisID: 'y1',
+            }
+                , {
+                label: 'Ch3',
+                data: [],
+                backgroundColor: 'rgba(180,60,0,0.5)',
+                borderColor: 'rgba(180,60,0,1)',
+                //yAxisID: 'y1',
+            }
+            ]
+        };
+
+        // config block
+        const dataMap1 = { Ch0: 'ain0', Ch1: 'ain1', Ch2: 'ain2', Ch3: 'ain3' };
+        const config3 = {
+            type: 'line',
+            data: data3,
+            options: {
+                animation: false,  // disable animations
+                interaction: {
+                    intersect: false
+                },
+                elements: {
+                    point: {
+                        radius: 0 // zero = don't plot the points
+                    },
+                    line: {
+                        borderWidth: 2, // sets the line weight
+                        tension: 0.1, // adds a little spline/curviness to the line
+                    },
+                },
+                scales: {
+                    x: {
+                        type: 'realtime',
+                        realtime: {
+                            //delay: 100,
+                            duration: 60000, // chart history (60000 = 60 seconds, with 1 Hz data)
+                            ttl: undefined,
+                            frameRate: 20,
+                            onRefresh: chart => {
+                                chart.data.datasets.forEach(dataset => {
+                                    //console.log(dataset)
+                                    dataset.data.push({
+                                        x: Date.now(),
+                                        //y: dataset.label === 'Ax' ? mpu6050_data.ax : dataset.label === 'Ay' ?mpu6050_data.ay : mpu6050_data.az
+                                        y: T8_AIN_data[dataMap1[dataset.label]],
+                                    });
+                                });
+                            }
+                        }
+                    },
+                    y: {
+                        suggestedMax: 1,
+                        suggestedMin: -1
+                        // ticks: {
+                        //     stepSize: 0.5
+                        //}
+                    },
+                }
+            }
+        };
+
+        // render init block
+        const ain_chart = new Chart(
+            document.getElementById('ain_chart'),
+            config3
+        );
+
+
+    </script>
+
+</body>
+
+</html>
